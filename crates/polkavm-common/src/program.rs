@@ -2103,14 +2103,14 @@ impl<'a, 'b, 'c> InstructionVisitor for InstructionFormatter<'a, 'b, 'c> {
         let d = self.format_reg(d);
         let s1 = self.format_reg(s1);
         let s2 = self.format_reg(s2);
-        write!(self, "{d} = ~({s1} & {s2})")
+        write!(self, "{d} = ({s1} & ~{s2})")
     }
 
     fn or_inverted(&mut self, d: RawReg, s1: RawReg, s2: RawReg) -> Self::ReturnTy {
         let d = self.format_reg(d);
         let s1 = self.format_reg(s1);
         let s2 = self.format_reg(s2);
-        write!(self, "{d} = ~({s1} | {s2})")
+        write!(self, "{d} = ({s1} | ~{s2})")
     }
 
     fn xor_inverted(&mut self, d: RawReg, s1: RawReg, s2: RawReg) -> Self::ReturnTy {

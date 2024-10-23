@@ -1959,6 +1959,9 @@ where
                                     let imm: i32 = imm.try_into().expect("immediate operand overflow");
                                     BasicInst::LoadImmediate { dst, imm }
                                 }
+                                Some(RegValue::InputReg(src, _)) => {
+                                    BasicInst::MoveReg { dst, src }
+                                }
                                 _ => {
                                     return Err(ProgramFromElfError::other(format!(
                                         "found a {:?} instruction using a zero register",
@@ -1972,6 +1975,10 @@ where
             }
 
             use crate::riscv::RegRegKind as K;
+            if kind == K::Maximum || kind == K::MaximumUnsigned {
+                println!("{:?}", instruction);
+            }
+
             let instruction = match kind {
                 K::Add => anyany!(Add),
                 K::Add64 => anyany!(Add64),
@@ -3787,8 +3794,8 @@ impl OperationKind {
             Self::AndInverted => lhs & (!rhs),
             Self::OrInverted => lhs | (!rhs),
             Self::XorInverted => !(lhs ^ rhs),
-            Self::Maximum => todo!(),
-            Self::MaximumUnsigned => todo!(),
+            Self::Maximum => lhs.max(rhs),
+            Self::MaximumUnsigned => (lhs as u64).max(rhs as u64) as i64,
             Self::Minimum => todo!(),
             Self::MinimumUnsigned => todo!(),
             Self::RotateLeft => todo!(),
@@ -3894,6 +3901,14 @@ impl OperationKind {
             // x / 0 = -1
             (O::Div,                      _, C(0)) => C(-1),
             (O::DivUnsigned,              _, C(0)) => C(-1),
+
+            // (x & ~0) = x
+            (O::AndInverted,              lhs, C(0)) => lhs,
+            // (0 & ~x) = 0
+            (O::AndInverted,              C(0), _) => C(0),
+
+            (O::MaximumUnsigned, C(0), rhs) => rhs,
+            (O::MaximumUnsigned, lhs, C(0)) => lhs,
 
             _ => return None,
         };
