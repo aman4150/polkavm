@@ -583,6 +583,11 @@ enum BasicInst<T> {
         dst: Reg,
         src: Reg,
     },
+    Reg {
+        kind: RegKind,
+        dst: Reg,
+        src: Reg,
+    },
     RegReg {
         kind: RegRegKind,
         dst: Reg,
@@ -635,7 +640,7 @@ impl<T> BasicInst<T> {
             | BasicInst::LoadAbsolute { .. }
             | BasicInst::LoadAddress { .. }
             | BasicInst::LoadAddressIndirect { .. } => RegMask::empty(),
-            BasicInst::MoveReg { src, .. } => RegMask::from(src),
+            BasicInst::MoveReg { src, .. } | BasicInst::Reg { src, .. } => RegMask::from(src),
             BasicInst::StoreAbsolute { src, .. } => RegMask::from(src),
             BasicInst::LoadIndirect { base, .. } => RegMask::from(base),
             BasicInst::StoreIndirect { src, base, .. } => RegMask::from(src) | RegMask::from(base),
@@ -659,6 +664,7 @@ impl<T> BasicInst<T> {
             | BasicInst::LoadIndirect { dst, .. }
             | BasicInst::RegReg { dst, .. }
             | BasicInst::Cmov { dst, .. }
+            | BasicInst::Reg { dst, .. }
             | BasicInst::AnyAny { dst, .. } => RegMask::from(dst),
             BasicInst::Ecalli { nth_import } => imports[nth_import].dst_mask(),
             BasicInst::Sbrk { dst, .. } => RegMask::from(dst),
@@ -671,6 +677,7 @@ impl<T> BasicInst<T> {
             BasicInst::LoadAbsolute { .. } | BasicInst::LoadIndirect { .. } => !config.elide_unnecessary_loads,
             BasicInst::Nop
             | BasicInst::MoveReg { .. }
+            | BasicInst::Reg { .. }
             | BasicInst::LoadImmediate { .. }
             | BasicInst::LoadImmediate64 { .. }
             | BasicInst::LoadAddress { .. }
@@ -721,6 +728,11 @@ impl<T> BasicInst<T> {
                 src: src.map_register(|reg| map(reg, OpKind::Read)),
                 base: map(base, OpKind::Read),
                 offset,
+            }),
+            BasicInst::Reg { kind, dst, src } => Some(BasicInst::Reg {
+                kind,
+                src: map(src, OpKind::Read),
+                dst: map(dst, OpKind::Write),
             }),
             BasicInst::RegReg { kind, dst, src1, src2 } => Some(BasicInst::RegReg {
                 kind,
@@ -811,6 +823,7 @@ impl<T> BasicInst<T> {
             BasicInst::LoadAddressIndirect { dst, target } => BasicInst::LoadAddressIndirect { dst, target: map(target)? },
             BasicInst::LoadIndirect { kind, dst, base, offset } => BasicInst::LoadIndirect { kind, dst, base, offset },
             BasicInst::StoreIndirect { kind, src, base, offset } => BasicInst::StoreIndirect { kind, src, base, offset },
+            BasicInst::Reg { kind, dst, src } => BasicInst::Reg { kind, dst, src },
             BasicInst::RegReg { kind, dst, src1, src2 } => BasicInst::RegReg { kind, dst, src1, src2 },
             BasicInst::AnyAny { kind, dst, src1, src2 } => BasicInst::AnyAny { kind, dst, src1, src2 },
             BasicInst::Cmov { kind, dst, src, cond } => BasicInst::Cmov { kind, dst, src, cond },
@@ -833,6 +846,7 @@ impl<T> BasicInst<T> {
             | BasicInst::LoadImmediate64 { .. }
             | BasicInst::LoadIndirect { .. }
             | BasicInst::StoreIndirect { .. }
+            | BasicInst::Reg { .. }
             | BasicInst::RegReg { .. }
             | BasicInst::AnyAny { .. }
             | BasicInst::Cmov { .. }
@@ -1840,6 +1854,8 @@ where
                 RegImmKind::ShiftLogicalRight64 => AnyAnyKind::ShiftLogicalRight64,
                 RegImmKind::ShiftArithmeticRight => AnyAnyKind::ShiftArithmeticRight,
                 RegImmKind::ShiftArithmeticRight64 => AnyAnyKind::ShiftArithmeticRight64,
+                RegImmKind::RotateRight => AnyAnyKind::RotateRight,
+                RegImmKind::RotateRightWord => AnyAnyKind::RotateRightWord,
             };
 
             match src {
@@ -1865,6 +1881,41 @@ where
                     }));
                 }
             }
+
+            Ok(())
+        }
+        Inst::Reg { kind, dst, src } => {
+            let Some(dst) = cast_reg_non_zero(dst)? else {
+                emit(InstExt::nop());
+                return Ok(());
+            };
+
+            let Some(src) = cast_reg_non_zero(src)? else {
+                return Err(ProgramFromElfError::other(
+                    "found an invalid instruction",
+                ));
+            };
+
+            use crate::riscv::RegKind as K;
+            let kind = match kind {
+                K::CountLeadingZeroBits => RegKind::CountLeadingZeroBits,
+                K::CountLeadingZeroBitsWord => RegKind::CountLeadingZeroBitsWord,
+                K::CountSetBits => RegKind::CountSetBits,
+                K::CountSetBitsWord => RegKind::CountSetBitsWord,
+                K::CountTrailingZeroBits => RegKind::CountTrailingZeroBits,
+                K::CountTrailingZeroBitsWord => RegKind::CountTrailingZeroBitsWord,
+                K::OrCombineByte => RegKind::OrCombineByte,
+                K::ReverseByte => RegKind::ReverseByte,
+                K::SignExtendByte => RegKind::SignExtendByte,
+                K::SignExtendHalfWord => RegKind::SignExtendHalfWord,
+                K::ZeroExtendHalfWord => RegKind::ZeroExtendHalfWord,
+            };
+
+            emit(InstExt::Basic(BasicInst::Reg {
+                kind,
+                dst,
+                src,
+            }));
 
             Ok(())
         }
@@ -1959,6 +2010,18 @@ where
                 K::Rem64 => regreg!(Rem64),
                 K::RemUnsigned => regreg!(RemUnsigned),
                 K::RemUnsigned64 => regreg!(RemUnsigned64),
+
+                K::AndInverted => regreg!(AndInverted),
+                K::OrInverted => regreg!(OrInverted),
+                K::XorInverted => regreg!(XorInverted),
+                K::Maximum => regreg!(Maximum),
+                K::MaximumUnsigned => regreg!(MaximumUnsigned),
+                K::Minimum => regreg!(Minimum),
+                K::MinimumUnsigned => regreg!(MinimumUnsigned),
+                K::RotateLeft => regreg!(RotateLeft),
+                K::RotateLeftWord => regreg!(RotateLeftWord),
+                K::RotateRight => anyany!(RotateRight),
+                K::RotateRightWord => anyany!(RotateRightWord),
             };
 
             emit(InstExt::Basic(instruction));
@@ -3425,6 +3488,24 @@ pub enum AnyAnyKind {
     MulUpperSignedSigned64,
     MulUpperUnsignedUnsigned,
     MulUpperUnsignedUnsigned64,
+
+    RotateRight,
+    RotateRightWord,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum RegKind {
+    CountLeadingZeroBits,
+    CountLeadingZeroBitsWord,
+    CountSetBits,
+    CountSetBitsWord,
+    CountTrailingZeroBits,
+    CountTrailingZeroBitsWord,
+    OrCombineByte,
+    ReverseByte,
+    SignExtendByte,
+    SignExtendHalfWord,
+    ZeroExtendHalfWord,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -3439,6 +3520,16 @@ pub enum RegRegKind {
     Rem64,
     RemUnsigned,
     RemUnsigned64,
+
+    AndInverted,
+    OrInverted,
+    XorInverted,
+    Maximum,
+    MaximumUnsigned,
+    Minimum,
+    MinimumUnsigned,
+    RotateLeft,
+    RotateLeftWord,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -3485,6 +3576,18 @@ enum OperationKind {
     NotEq,
     SetGreaterOrEqualSigned,
     SetGreaterOrEqualUnsigned,
+
+    AndInverted,
+    OrInverted,
+    XorInverted,
+    Maximum,
+    MaximumUnsigned,
+    Minimum,
+    MinimumUnsigned,
+    RotateLeft,
+    RotateLeftWord,
+    RotateRight,
+    RotateRightWord,
 }
 
 impl From<AnyAnyKind> for OperationKind {
@@ -3516,6 +3619,8 @@ impl From<AnyAnyKind> for OperationKind {
             AnyAnyKind::MulUpperSignedSigned64 => Self::MulUpperSignedSigned64,
             AnyAnyKind::MulUpperUnsignedUnsigned => Self::MulUpperUnsignedUnsigned,
             AnyAnyKind::MulUpperUnsignedUnsigned64 => Self::MulUpperUnsignedUnsigned64,
+            AnyAnyKind::RotateRight => Self::RotateRight,
+            AnyAnyKind::RotateRightWord => Self::RotateRightWord,
         }
     }
 }
@@ -3533,6 +3638,15 @@ impl From<RegRegKind> for OperationKind {
             RegRegKind::Rem64 => Self::Rem64,
             RegRegKind::RemUnsigned => Self::RemUnsigned,
             RegRegKind::RemUnsigned64 => Self::RemUnsigned64,
+            RegRegKind::AndInverted => Self::AndInverted,
+            RegRegKind::OrInverted => Self::OrInverted,
+            RegRegKind::XorInverted => Self::XorInverted,
+            RegRegKind::Maximum => Self::Maximum,
+            RegRegKind::MaximumUnsigned => Self::MaximumUnsigned,
+            RegRegKind::Minimum => Self::Minimum,
+            RegRegKind::MinimumUnsigned => Self::MinimumUnsigned,
+            RegRegKind::RotateLeft => Self::RotateLeft,
+            RegRegKind::RotateLeftWord => Self::RotateLeftWord,
         }
     }
 }
@@ -3666,6 +3780,21 @@ impl OperationKind {
             Self::DivUnsigned64 => divu64(lhs as u64, rhs as u64) as i64,
             Self::Rem64 => rem64(lhs, rhs),
             Self::RemUnsigned64 => remu64(lhs as u64, rhs as u64) as i64,
+
+            //
+            // Zbb instructions
+            //
+            Self::AndInverted => lhs & (!rhs),
+            Self::OrInverted => lhs | (!rhs),
+            Self::XorInverted => !(lhs ^ rhs),
+            Self::Maximum => todo!(),
+            Self::MaximumUnsigned => todo!(),
+            Self::Minimum => todo!(),
+            Self::MinimumUnsigned => todo!(),
+            Self::RotateLeft => todo!(),
+            Self::RotateLeftWord => todo!(),
+            Self::RotateRight => todo!(),
+            Self::RotateRightWord => todo!(),
         }
     }
 
@@ -6609,6 +6738,25 @@ fn emit_code(
                     let value = get_data_address(target)?;
                     Instruction::load_u32(conv_reg(dst), value)
                 }
+                BasicInst::Reg { kind, dst, src } => {
+                    codegen! {
+                        args = (conv_reg(dst), conv_reg(src)),
+                        kind = kind,
+                        {
+                            RegKind::CountLeadingZeroBits => count_leading_zero_bits,
+                            RegKind::CountLeadingZeroBitsWord => count_leading_zero_bits_word,
+                            RegKind::CountSetBits => count_trailing_zero_bits,
+                            RegKind::CountSetBitsWord => count_trailing_zero_bits_word,
+                            RegKind::CountTrailingZeroBits => count_set_bits,
+                            RegKind::CountTrailingZeroBitsWord => count_set_bits_word,
+                            RegKind::OrCombineByte => sign_extend_byte,
+                            RegKind::ReverseByte => sign_extend_half_word,
+                            RegKind::SignExtendByte => zero_extend_half_word,
+                            RegKind::SignExtendHalfWord => or_combine_byte,
+                            RegKind::ZeroExtendHalfWord => reverse_byte,
+                        }
+                    }
+                }
                 BasicInst::RegReg { kind, dst, src1, src2 } => {
                     use RegRegKind as K;
                     codegen! {
@@ -6625,6 +6773,15 @@ fn emit_code(
                             K::Rem64 => rem_signed_64,
                             K::RemUnsigned => rem_unsigned,
                             K::RemUnsigned64 => rem_unsigned_64,
+                            K::AndInverted => and_inverted,
+                            K::OrInverted => or_inverted,
+                            K::XorInverted => xor_inverted,
+                            K::Maximum => maximum,
+                            K::MaximumUnsigned => maximum_unsigned,
+                            K::Minimum => minimum,
+                            K::MinimumUnsigned => minimum_unsigned,
+                            K::RotateLeft => rotate_left,
+                            K::RotateLeftWord => rotate_left_word,
                         }
                     }
                 }
@@ -6665,6 +6822,8 @@ fn emit_code(
                                     K::MulUpperSignedSigned64 => mul_upper_signed_signed_64,
                                     K::MulUpperUnsignedUnsigned => mul_upper_unsigned_unsigned,
                                     K::MulUpperUnsignedUnsigned64 => mul_upper_unsigned_unsigned_64,
+                                    K::RotateRight => rotate_right,
+                                    K::RotateRightWord => rotate_right_word,
                                 }
                             }
                         }
@@ -6697,6 +6856,8 @@ fn emit_code(
                                 K::MulUpperSignedSigned64 => I::mul_upper_signed_signed_imm_64(dst, src1, src2),
                                 K::MulUpperUnsignedUnsigned => I::mul_upper_unsigned_unsigned_imm(dst, src1, src2),
                                 K::MulUpperUnsignedUnsigned64 => I::mul_upper_unsigned_unsigned_imm_64(dst, src1, src2),
+                                K::RotateRight => I::rotate_right_imm(dst, src1, src2),
+                                K::RotateRightWord => I::rotate_right_word_imm(dst, src1, src2),
                             }
                         }
                         (RegImm::Imm(src1), RegImm::Reg(src2)) => {
@@ -6729,6 +6890,9 @@ fn emit_code(
                                 K::ShiftLogicalRight64 => I::shift_logical_right_imm_alt(dst, src2, src1),
                                 K::ShiftArithmeticRight => I::shift_arithmetic_right_imm_alt(dst, src2, src1),
                                 K::ShiftArithmeticRight64 => I::shift_arithmetic_right_64_imm_alt(dst, src2, src1),
+
+                                K::RotateRight => I::rotate_right_imm(dst, src2, src1),
+                                K::RotateRightWord => I::rotate_right_word_imm(dst, src2, src1),
                             }
                         }
                         (RegImm::Imm(src1), RegImm::Imm(src2)) => {
@@ -7978,7 +8142,7 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             strip: false,
-            optimize: true,
+            optimize: false,
             inline_threshold: 2,
             elide_unnecessary_loads: true,
             dispatch_table: Vec::new(),

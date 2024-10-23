@@ -2980,6 +2980,50 @@ impl<'a, const DEBUG: bool> InstructionVisitor for Compiler<'a, DEBUG> {
         todo!()
     }
 
+    fn and_inverted(&mut self, _d: RawReg, _s1: RawReg, _s2: RawReg) -> Self::ReturnTy {
+        todo!()
+    }
+
+    fn or_inverted(&mut self, _d: RawReg, _s1: RawReg, _s2: RawReg) -> Self::ReturnTy {
+        todo!()
+    }
+
+    fn xor_inverted(&mut self, _d: RawReg, _s1: RawReg, _s2: RawReg) -> Self::ReturnTy {
+        todo!()
+    }
+
+    fn maximum(&mut self, _d: RawReg, _s1: RawReg, _s2: RawReg) -> Self::ReturnTy {
+        todo!()
+    }
+
+    fn maximum_unsigned(&mut self, _d: RawReg, _s1: RawReg, _s2: RawReg) -> Self::ReturnTy {
+        todo!()
+    }
+
+    fn minimum(&mut self, _d: RawReg, _s1: RawReg, _s2: RawReg) -> Self::ReturnTy {
+        todo!()
+    }
+
+    fn minimum_unsigned(&mut self, _d: RawReg, _s1: RawReg, _s2: RawReg) -> Self::ReturnTy {
+        todo!()
+    }
+
+    fn rotate_left(&mut self, _d: RawReg, _s1: RawReg, _s2: RawReg) -> Self::ReturnTy {
+        todo!()
+    }
+
+    fn rotate_left_word(&mut self, _d: RawReg, _s1: RawReg, _s2: RawReg) -> Self::ReturnTy {
+        todo!()
+    }
+
+    fn rotate_right(&mut self, _d: RawReg, _s1: RawReg, _s2: RawReg) -> Self::ReturnTy {
+        todo!()
+    }
+
+    fn rotate_right_word(&mut self, _d: RawReg, _s1: RawReg, _s2: RawReg) -> Self::ReturnTy {
+        todo!()
+    }
+
     fn set_less_than_unsigned_imm(&mut self, d: RawReg, s1: RawReg, s2: u32) -> Self::ReturnTy {
         emit!(self, set_less_than_unsigned_imm(d, s1, s2));
     }
@@ -3092,6 +3136,50 @@ impl<'a, const DEBUG: bool> InstructionVisitor for Compiler<'a, DEBUG> {
         emit!(self, move_reg(d, s));
     }
 
+    fn count_leading_zero_bits(&mut self, _d: RawReg, _s: RawReg) -> Self::ReturnTy {
+        todo!()
+    }
+
+    fn count_leading_zero_bits_word(&mut self, _d: RawReg, _s: RawReg) -> Self::ReturnTy {
+        todo!()
+    }
+
+    fn count_trailing_zero_bits(&mut self, _d: RawReg, _s: RawReg) -> Self::ReturnTy {
+        todo!()
+    }
+
+    fn count_trailing_zero_bits_word(&mut self, _d: RawReg, _s: RawReg) -> Self::ReturnTy {
+        todo!()
+    }
+
+    fn count_set_bits(&mut self, _d: RawReg, _s: RawReg) -> Self::ReturnTy {
+        todo!()
+    }
+
+    fn count_set_bits_word(&mut self, _d: RawReg, _s: RawReg) -> Self::ReturnTy {
+        todo!()
+    }
+
+    fn sign_extend_byte(&mut self, _d: RawReg, _s: RawReg) -> Self::ReturnTy {
+        todo!()
+    }
+
+    fn sign_extend_half_word(&mut self, _d: RawReg, _s: RawReg) -> Self::ReturnTy {
+        todo!()
+    }
+
+    fn zero_extend_half_word(&mut self, _d: RawReg, _s: RawReg) -> Self::ReturnTy {
+        todo!()
+    }
+
+    fn or_combine_byte(&mut self, _d: RawReg, _s: RawReg) -> Self::ReturnTy {
+        todo!()
+    }
+
+    fn reverse_byte(&mut self, _d: RawReg, _s: RawReg) -> Self::ReturnTy {
+        todo!()
+    }
+
     fn cmov_if_zero(&mut self, d: RawReg, s: RawReg, c: RawReg) -> Self::ReturnTy {
         emit!(self, cmov_if_zero(d, s, c));
     }
@@ -3106,6 +3194,14 @@ impl<'a, const DEBUG: bool> InstructionVisitor for Compiler<'a, DEBUG> {
 
     fn cmov_if_not_zero_imm(&mut self, d: RawReg, c: RawReg, s: u32) -> Self::ReturnTy {
         emit!(self, cmov_if_not_zero_imm(d, c, s));
+    }
+
+    fn rotate_right_imm(&mut self, _d: RawReg, _s: RawReg, _c: u32) -> Self::ReturnTy {
+        todo!()
+    }
+
+    fn rotate_right_word_imm(&mut self, _d: RawReg, _s: RawReg, _c: u32) -> Self::ReturnTy {
+        todo!()
     }
 
     fn add_64_imm(&mut self, _d: RawReg, _s1: RawReg, _s2: u32) -> Self::ReturnTy {
