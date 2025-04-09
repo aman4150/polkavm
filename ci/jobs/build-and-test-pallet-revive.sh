@@ -4,7 +4,7 @@ set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 
 POLKAVM_CRATES_ROOT="$(pwd)/proxy-crates"
-POLKDOT_SDK_COMMIT=2700dbf2dda8b7f593447c939e1a26dacdb8ce45
+POLKDOT_SDK_COMMIT=e9393a9afc3b33cc2d01b7820a8f186434196758
 
 LOG_FILE="output.log"
 TARGET_DIR=target/run-pallet-revive-node
@@ -32,14 +32,24 @@ echo 'channel = "nightly-2024-11-01"' >> rust-toolchain.toml
 PALLET_REVIVE_FIXTURES_RUSTUP_TOOLCHAIN=nightly-2024-11-01-x86_64-unknown-linux-gnu \
 PALLET_REVIVE_FIXTURES_STRIP=0 \
 PALLET_REVIVE_FIXTURES_OPTIMIZE=1 \
+SUBSTRATE_RUNTIME_TARGET=riscv \
+SUBSTRATE_ENABLE_POLKAVM=1 \
 cargo build \
+    --config "patch.crates-io.polkavm013.path='$POLKAVM_CRATES_ROOT/polkavm013'" --config "patch.crates-io.polkavm013.package='polkavm'" \
+    --config "patch.crates-io.polkavm-derive014.path='$POLKAVM_CRATES_ROOT/polkavm-derive014'" --config "patch.crates-io.polkavm-derive014.package='polkavm-derive'" \
+    --config "patch.crates-io.polkavm-linker014.path='$POLKAVM_CRATES_ROOT/polkavm-linker014'" --config "patch.crates-io.polkavm-linker014.package='polkavm-linker'" \
     --release -p staging-node-cli
 
 echo "Running Node in background..."
 PALLET_REVIVE_FIXTURES_RUSTUP_TOOLCHAIN=nightly-2024-11-01-x86_64-unknown-linux-gnu \
 PALLET_REVIVE_FIXTURES_STRIP=0 \
 PALLET_REVIVE_FIXTURES_OPTIMIZE=1 \
+SUBSTRATE_RUNTIME_TARGET=riscv \
+SUBSTRATE_ENABLE_POLKAVM=1 \
 cargo run \
+    --config "patch.crates-io.polkavm013.path='$POLKAVM_CRATES_ROOT/polkavm013'" --config "patch.crates-io.polkavm013.package='polkavm'" \
+    --config "patch.crates-io.polkavm-derive014.path='$POLKAVM_CRATES_ROOT/polkavm-derive014'" --config "patch.crates-io.polkavm-derive014.package='polkavm-derive'" \
+    --config "patch.crates-io.polkavm-linker014.path='$POLKAVM_CRATES_ROOT/polkavm-linker014'" --config "patch.crates-io.polkavm-linker014.package='polkavm-linker'" \
     --release -p staging-node-cli -- --dev --tmp > "$LOG_FILE" 2>&1 &
 
 CARGO_PID=$!
