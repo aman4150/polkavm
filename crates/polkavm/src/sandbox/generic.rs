@@ -1320,7 +1320,7 @@ impl super::Sandbox for Sandbox {
     }
 
     fn set_gas(&mut self, gas: Gas) {
-        self.vmctx().gas = gas;
+        self.vmctx_mut().gas = gas;
     }
 
     fn program_counter(&self) -> Option<ProgramCounter> {
@@ -1409,7 +1409,7 @@ impl super::Sandbox for Sandbox {
         todo!()
     }
 
-    fn free_pages(&mut self, _address: u32, _length: u32) -> Result<(), Self::Error> {
+    fn free_pages(&mut self, _address: u32, _length: u32) -> Result<(), Error> {
         todo!()
     }
 
@@ -1419,7 +1419,7 @@ impl super::Sandbox for Sandbox {
         (heap_top - u64::from(heap_base)) as u32
     }
 
-    fn sbrk(&mut self, size: u32) -> Result<Option<u32>, Self::Error>{
+    fn sbrk(&mut self, size: u32) -> Result<Option<u32>, Error>{
         let new_heap_top = self.vmctx().heap_info.heap_top + u64::from(size);
 
         // SAFETY: `vmctx` is valid and was allocated along with the guest memory.

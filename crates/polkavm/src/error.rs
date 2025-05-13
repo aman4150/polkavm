@@ -1,6 +1,9 @@
 use alloc::string::{String, ToString};
 use polkavm_common::program::ProgramParseError;
 
+#[cfg(feature = "generic-sandbox")]
+use crate::sandbox::generic;
+
 macro_rules! bail {
     ($($arg:expr),* $(,)?) => {
         return Err(Error::from_display(format_args!($($arg),*)))
@@ -53,6 +56,14 @@ if_compiler_is_supported! {
     impl From<polkavm_linux_raw::Error> for Error {
         #[cold]
         fn from(error: polkavm_linux_raw::Error) -> Self {
+            Self(ErrorKind::Owned(error.to_string()))
+        }
+    }
+
+    #[cfg(feature = "generic-sandbox")]
+    impl From<generic::Error> for Error {
+        #[cold]
+        fn from(error: generic::Error) -> Self {
             Self(ErrorKind::Owned(error.to_string()))
         }
     }

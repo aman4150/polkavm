@@ -26,6 +26,9 @@ use crate::{Gas, ProgramCounter};
 #[cfg(feature = "module-cache")]
 use crate::module_cache::{ModuleCache, ModuleKey};
 
+#[cfg(feature = "generic-sandbox")]
+use crate::sandbox::generic;
+
 if_compiler_is_supported! {
     {
         use crate::sandbox::{Sandbox, SandboxInstance};
@@ -59,6 +62,13 @@ trait IntoResult<T> {
 if_compiler_is_supported! {
     #[cfg(target_os = "linux")]
     impl<T> IntoResult<T> for Result<T, polkavm_linux_raw::Error> {
+        fn into_result(self, message: &str) -> Result<T, Error> {
+            self.map_err(|error| Error::from(error).context(message))
+        }
+    }
+
+    #[cfg(feature = "generic-sandbox")]
+    impl<T> IntoResult<T> for Result<T, generic::Error> {
         fn into_result(self, message: &str) -> Result<T, Error> {
             self.map_err(|error| Error::from(error).context(message))
         }
