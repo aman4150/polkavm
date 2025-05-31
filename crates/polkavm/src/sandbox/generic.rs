@@ -1304,9 +1304,17 @@ impl super::Sandbox for Sandbox {
             let Some(address) = compiled_module.lookup_native_code_address(pc) else {
                 log::debug!("Tried to call into {pc} which doesn't have any native code associated with it");
                 self.is_program_counter_valid = true;
-                self.vmctx_mut().program_counter.store(pc.0, Ordering::Relaxed);
-                self.vmctx_mut().next_native_program_counter.store(0, Ordering::Relaxed);
-                return Ok(InterruptKind::Trap);
+                self.vmctx().program_counter.store(pc.0, Ordering::Relaxed);
+                if self.module.as_ref().unwrap().is_step_tracing() {
+                    self.vmctx().next_program_counter.store(pc.0, Ordering::Relaxed);
+                    self.vmctx()
+                        .next_native_program_counter
+                        .store(compiled_module.invalid_code_offset_address, Ordering::Relaxed);
+                    return Ok(InterruptKind::Step);
+                } else {
+                    self.vmctx().next_native_program_counter.store(0, Ordering::Relaxed);
+                    return Ok(InterruptKind::Trap);
+                }
             };
 
             log::trace!("Jumping into: {pc} (0x{address:x})");
