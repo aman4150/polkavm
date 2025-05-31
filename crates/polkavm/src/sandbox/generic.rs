@@ -945,6 +945,7 @@ impl Sandbox {
 
             Ok(InterruptKind::NotEnoughGas)
         } else {
+            self.vmctx().next_native_program_counter.store(0, Ordering::Relaxed);
             Ok(InterruptKind::Trap)
         }
     }
@@ -1323,6 +1324,7 @@ impl super::Sandbox for Sandbox {
         self.vmctx_mut().exit_reason = ExitReason::None;
 
         self.poison = Poison::Executing;
+        self.is_program_counter_valid = true;
 
         let compiled_module = Self::downcast_module(self.module.as_ref().unwrap());
         let entry_point = compiled_module.sandbox_program.0.sysenter_address;
@@ -1457,6 +1459,7 @@ impl super::Sandbox for Sandbox {
     }
 
     fn set_next_program_counter(&mut self, pc: ProgramCounter) {
+        self.is_program_counter_valid = false;
         self.next_program_counter = Some(pc);
         self.next_program_counter_changed = true;
     }
