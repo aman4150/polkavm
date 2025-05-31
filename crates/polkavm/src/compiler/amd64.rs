@@ -1160,6 +1160,11 @@ where
             assert!(conv_reg_const(Reg::A1) as u32 == rax as u32);
         };
 
+        if matches!(S::KIND, SandboxKind::Generic) {
+            self.asm.push(push(rdi));
+            self.asm.push(add((RegSize::R64, rdi, GENERIC_SANDBOX_MEMORY_REG)));
+        }
+
         let label_repeat = self.asm.create_label();
         self.asm.push(lea_rip_label(rcx, label_repeat));
 
@@ -1199,6 +1204,10 @@ where
                 self.asm.push_raw(REP_STOSB_MACHINE_CODE);
                 self.asm.push(mov(reg_size, count, rcx));
             }
+        }
+
+        if matches!(S::KIND, SandboxKind::Generic) {
+            self.asm.push(pop(rdi));
         }
     }
 

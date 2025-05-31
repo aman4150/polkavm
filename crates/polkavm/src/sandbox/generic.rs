@@ -116,6 +116,7 @@ pub(crate) const GUEST_MEMORY_TO_VMCTX_OFFSET: isize = -4096;
 
 const GAS_METERING_TRAP_OFFSET: u64 = 3;
 const GAS_COST_GENERIC_SANDBOX_OFFSET: usize = 7;
+const REP_STOSB_MACHINE_CODE: &[u8] = &[0xf3, 0xaa];
 
 fn get_guest_memory_offset() -> usize {
     get_native_page_size()
@@ -921,7 +922,16 @@ impl Sandbox {
         self.vmctx().next_program_counter.store(program_counter.0, Ordering::Relaxed);
         self.is_program_counter_valid = true;
 
-        if self.gas_metering.is_some() && self.gas() < 0 {
+        let is_executing_memset = compiled_module.machine_code()
+            .get(machine_code_offset as usize..)
+            .map_or(false, |slice| slice.starts_with(REP_STOSB_MACHINE_CODE));
+
+        if is_executing_memset {
+            log::trace!("Executing memset at program counter = {program_counter}, machine code offset = {machine_code_offset}");
+            self.vmctx().next_native_program_counter.store(0, Ordering::Relaxed);
+
+            Ok(InterruptKind::Trap)
+        } else if self.gas_metering.is_some() && self.gas() < 0 {
             let Some(offset) = machine_code_offset.checked_sub(GAS_METERING_TRAP_OFFSET) else {
                 return Err(Error::from("internal error: address underflow after a guest signal"));
             };
