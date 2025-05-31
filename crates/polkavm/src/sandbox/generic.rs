@@ -711,6 +711,7 @@ pub struct Sandbox {
     next_program_counter_changed: bool,
 
     aux_data_address: u32,
+    aux_data_full_length: u32,
     aux_data_length: u32,
 }
 
@@ -820,10 +821,22 @@ impl Sandbox {
         Ok(())
     }
 
-    fn bound_check_access(&self, mut address: u32, mut length: u32, is_writeable: bool) -> Result<(), ()> {
+    fn bound_check_access(&self, mut address: u32, mut length: u32, is_writable: bool) -> Result<(), ()> {
         let Some(address_end) = address.checked_add(length) else {
             return Err(());
         };
+
+        if address >= self.aux_data_address
+            && address_end < self.aux_data_address + self.aux_data_full_length
+        {
+            if is_writable {
+                return Ok(());
+            }
+            if address_end > self.aux_data_address + self.aux_data_length {
+                return Err(());
+            }
+            return Ok(());
+        }
 
         for map in &self.vmctx().maps {
             if address < map.address {
@@ -833,7 +846,7 @@ impl Sandbox {
             let map_end = map.address + map.length;
             if address >= map_end {
                 continue;
-            } else if is_writeable && !map.is_writable {
+            } else if is_writable && !map.is_writable {
                 return Err(());
             } else if address_end <= map_end {
                 return Ok(());
@@ -906,6 +919,30 @@ impl Sandbox {
         } else {
             Ok(InterruptKind::Trap)
         }
+    }
+
+    fn set_aux_data_permission_for_host(&mut self) -> Result<(), Error> {
+        if self.aux_data_full_length != 0 {
+            let offset = self.guest_memory_offset + self.aux_data_address as usize;
+            let full_length = self.aux_data_full_length as usize;
+
+            self.memory.mprotect(offset, full_length, PROT_READ | PROT_WRITE)?;
+        }
+
+        Ok(())
+    }
+
+    fn set_aux_data_permission_for_guest(&mut self) -> Result<(), Error> {
+        if self.aux_data_full_length != 0 {
+            let offset = self.guest_memory_offset + self.aux_data_address as usize;
+            let length = self.aux_data_length as usize;
+            let full_length = self.aux_data_full_length as usize;
+
+            self.memory.mprotect(offset, full_length, 0)?;
+            self.memory.mprotect(offset, length, PROT_READ)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -1082,7 +1119,7 @@ impl super::Sandbox for Sandbox {
             memory_map.push(ProgramMap {
                 address: cfg.aux_data_address(),
                 length: cfg.aux_data_size(),
-                is_writable: false,
+                is_writable: true,
                 kind: MapKind::Transient,
             });
         }
@@ -1130,6 +1167,7 @@ impl super::Sandbox for Sandbox {
             next_program_counter: None,
             next_program_counter_changed: true,
             aux_data_address: 0,
+            aux_data_full_length: 0,
             aux_data_length: 0,
         })
     }
@@ -1205,7 +1243,8 @@ impl super::Sandbox for Sandbox {
         self.gas_metering = module.gas_metering();
         self.module = Some(module.clone());
         self.aux_data_address = module.memory_map().aux_data_address();
-        self.aux_data_length = module.memory_map().aux_data_size();
+        self.aux_data_full_length = module.memory_map().aux_data_size();
+        self.aux_data_length = self.aux_data_full_length;
 
         Ok(())
     }
@@ -1261,6 +1300,7 @@ impl super::Sandbox for Sandbox {
         let entry_point = compiled_module.sandbox_program.0.sysenter_address;
 
         log::trace!("Jumping into guest program: 0x{:x}", entry_point);
+        self.set_aux_data_permission_for_guest().map_err(Error::from)?;
 
         #[allow(clippy::undocumented_unsafe_blocks)]
         unsafe {
@@ -1317,6 +1357,7 @@ impl super::Sandbox for Sandbox {
         };
 
         log::trace!("Returned from guest program");
+        self.set_aux_data_permission_for_host().map_err(Error::from)?;
         self.poison = Poison::None;
 
         if self.module.as_ref().unwrap().gas_metering() == Some(GasMeteringKind::Async) && self.gas() < 0 {
@@ -1404,7 +1445,14 @@ impl super::Sandbox for Sandbox {
         self.aux_data_length
     }
 
-    fn set_accessible_aux_size(&mut self, _size: u32) -> Result<(), Error> {
+    fn set_accessible_aux_size(&mut self, size: u32) -> Result<(), Error> {
+        if self.aux_data_address == 0 || self.aux_data_full_length == 0 {
+            return Err(Error::from("aux data address or length is zero"));
+        }
+        if size > self.aux_data_full_length {
+            return Err(Error::from("size exceeds the full length of aux data"));
+        }
+        self.aux_data_length = size;
         Ok(())
     }
 
