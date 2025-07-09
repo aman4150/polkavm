@@ -3745,6 +3745,82 @@ fn update_references(
     }
 }
 
+fn perform_store_fusion(
+    all_blocks: &mut [BasicBlock<AnyTarget, BlockTarget>],
+    reachability_graph: &mut ReachabilityGraph,
+    optimize_queue: Option<&mut VecSet<BlockTarget>>,
+    block_target: BlockTarget,
+    ) -> bool
+{
+    let block = &mut all_blocks[block_target.index()];
+    let references = gather_references(block);
+
+    let mut modified = false;
+    let mut process_byte_code = Vec::new();
+    let mut store_byte_code = Vec::new();
+    let operations = &mut block.ops;
+    for nth_instruction in 0..operations.len() {
+        let (_, op) = operations[nth_instruction];
+        if let BasicInst::StoreIndirect { kind,  src, base, offset } = op {
+            if kind == StoreKind::U8 && matches!(src, RegImm::Imm(0)) {
+                if store_byte_code.is_empty() {
+                    store_byte_code.push((nth_instruction, base, offset));
+                } else if let Some((_, prev_base, prev_offset)) = store_byte_code.last() {
+                    if base != *prev_base || offset + 1 != *prev_offset {
+                        process_byte_code = store_byte_code.clone();
+                        store_byte_code.clear();
+                    }
+                    store_byte_code.push((nth_instruction, base, offset));
+                }
+            }
+        }
+        else
+        {
+            process_byte_code = store_byte_code.clone();
+            store_byte_code.clear();
+        }
+
+        if store_byte_code.len() == 8 {
+            process_byte_code = store_byte_code.clone();
+            store_byte_code.clear();
+        }
+
+        if matches!(process_byte_code.len(), 2 | 4 | 8) {
+            for (nth_instruction, _, _) in &process_byte_code {
+                operations[*nth_instruction].1 = BasicInst::Nop;
+            }
+
+            let Some((nth_instruction, base, offset)) = process_byte_code.last() else {
+                unreachable!("process_byte_code should have at least one element here");
+            };
+
+            let kind = if process_byte_code.len() == 2 {
+                StoreKind::U16
+            } else if process_byte_code.len() == 4 {
+                StoreKind::U32
+            } else {
+                StoreKind::U64
+            };
+
+            operations[*nth_instruction].1 = BasicInst::StoreIndirect {
+                kind,
+                src: RegImm::Imm(0),
+                base: *base,
+                offset: *offset,
+            };
+
+            modified = true;
+        }
+    }
+
+    if modified {
+        all_blocks[block_target.index()].ops.retain(|(_, instruction)| !instruction.is_nop());
+        update_references(all_blocks, reachability_graph, optimize_queue, block_target, references);
+    }
+
+    modified
+}
+
 #[deny(clippy::as_conversions)]
 fn perform_dead_code_elimination(
     config: &Config,
@@ -5375,6 +5451,7 @@ fn optimize_program(
     let mut count_inline = 0;
     let mut count_dce = 0;
     let mut count_cp = 0;
+    let mut count_sf = 0;
 
     let mut inline_history: HashSet<(BlockTarget, BlockTarget)> = HashSet::new(); // Necessary to prevent infinite loops.
     macro_rules! run_optimizations {
@@ -5423,6 +5500,16 @@ fn optimize_program(
                     count_cp += 1;
                     modified |= true;
                 }
+
+                if perform_store_fusion(
+                    all_blocks,
+                    reachability_graph,
+                    $optimize_queue,
+                    $current,
+                ) {
+                    count_sf += 1;
+                    modified |= true;
+                }
             }
 
             modified
@@ -5453,6 +5540,7 @@ fn optimize_program(
     log::debug!("             Inlinining: {count_inline}");
     log::debug!("  Dead code elimination: {count_dce}");
     log::debug!("   Constant propagation: {count_cp}");
+    log::debug!("           Store fusion: {count_sf}");
     garbage_collect_reachability(all_blocks, reachability_graph);
 
     inline_history.clear();
