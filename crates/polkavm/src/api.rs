@@ -83,6 +83,29 @@ impl<T> IntoResult<T> for T {
 
 pub type RegValue = u64;
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct SetCacheSizeLimitArgs {
+    max_block_size: u32,
+    max_cache_size_bytes: usize,
+}
+
+impl SetCacheSizeLimitArgs {
+    pub fn new(max_block_size: u32, max_cache_size_bytes: usize) -> Self {
+        Self {
+            max_block_size,
+            max_cache_size_bytes,
+        }
+    }
+
+    pub fn max_block_size(&self) -> u32 {
+        self.max_block_size
+    }
+
+    pub fn max_cache_size_bytes(&self) -> usize {
+        self.max_cache_size_bytes
+    }
+}
+
 #[derive(Copy, Clone)]
 pub struct RuntimeInstructionSet {
     allow_sbrk: bool,
@@ -1716,11 +1739,12 @@ impl RawInstance {
         }
     }
 
-    /// Set a lose upper limit on the interpreter cache size.
-    pub fn set_interpreter_cache_size(&mut self, max_cache_size: Option<usize>) {
+    /// Set a tight upper limit on the interpreter cache size (in bytes).
+    pub fn set_interpreter_cache_size_limit(&mut self, cache_info: Option<SetCacheSizeLimitArgs>) -> Result<(), Error> {
         #[allow(irrefutable_let_patterns)]
         if let InstanceBackend::Interpreted(ref mut backend) = self.backend {
-            backend.set_interpreter_cache_size(max_cache_size);
+            backend.set_interpreter_cache_size_limit(cache_info)?
         }
+        Ok(())
     }
 }

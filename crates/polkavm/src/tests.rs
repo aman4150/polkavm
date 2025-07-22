@@ -1,7 +1,7 @@
 use crate::mutex::Mutex;
 use crate::{
     BackendKind, CallError, Caller, Config, Engine, GasMeteringKind, InterruptKind, Linker, MemoryAccessError, Module, ModuleConfig,
-    ProgramBlob, ProgramCounter, Reg, Segfault,
+    ProgramBlob, ProgramCounter, Reg, Segfault, SetCacheSizeLimitArgs,
 };
 use alloc::collections::BTreeMap;
 use alloc::format;
@@ -527,9 +527,21 @@ fn bounded_interpreter_cache(config: Config) {
             asm::load_imm(A1, 2),
             asm::load_imm(A2, 3),
             asm::jump(1),
+            asm::load_imm(A0, 1),
+            asm::load_imm(A1, 2),
+            asm::load_imm(A2, 3),
+            asm::jump(2),
+            asm::load_imm(A0, 1),
+            asm::load_imm(A1, 2),
+            asm::load_imm(A2, 3),
+            asm::jump(3),
+            asm::load_imm(A0, 1),
+            asm::load_imm(A1, 2),
+            asm::load_imm(A2, 3),
+            asm::jump(4),
             asm::load_imm(A3, 4),
             asm::load_imm(A4, 5),
-            asm::jump(2),
+            asm::jump(5),
             asm::load_imm(A5, 6),
             asm::ret(),
         ],
@@ -542,8 +554,9 @@ fn bounded_interpreter_cache(config: Config) {
 
     let mut instance = module.instantiate().unwrap();
 
-    // 3 for first three instructions + 3 for extra subroutines interpreter emits
-    instance.set_interpreter_cache_size(Some(6));
+    instance
+        .set_interpreter_cache_size_limit(Some(SetCacheSizeLimitArgs::new(4, 24 * 20)))
+        .unwrap();
 
     instance.set_reg(Reg::RA, crate::RETURN_TO_HOST);
     instance.set_next_program_counter(list[0].offset);

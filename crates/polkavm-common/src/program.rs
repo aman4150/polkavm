@@ -1,5 +1,6 @@
 use crate::abi::{VM_CODE_ADDRESS_ALIGNMENT, VM_MAXIMUM_CODE_SIZE, VM_MAXIMUM_IMPORT_COUNT, VM_MAXIMUM_JUMP_TABLE_ENTRIES};
-use crate::utils::ArcBytes;
+use crate::cast::cast;
+use crate::utils::{align_to_next_page_u32, ArcBytes};
 use crate::varint::{read_simple_varint, read_varint, write_simple_varint, MAX_VARINT_LENGTH};
 use core::fmt::Write;
 use core::ops::Range;
@@ -444,6 +445,18 @@ impl LookupTable {
     }
 }
 
+pub const INTERPRETER_CACHE_ENTRY_SIZE: u32 = 24;
+pub const INTERPRETER_CACHE_RESERVED_ENTRIES: u32 = 10;
+pub const INTERPRETER_FLATMAP_ENTRY_SIZE: u32 = 4;
+
+pub fn interpreter_calculate_cache_size(count: usize) -> usize {
+    count * INTERPRETER_CACHE_ENTRY_SIZE as usize
+}
+
+pub fn interpreter_calculate_cache_num_entries(bytes: usize) -> usize {
+    bytes / INTERPRETER_CACHE_ENTRY_SIZE as usize
+}
+
 static TABLE_1: LookupTable = LookupTable::build(1);
 static TABLE_2: LookupTable = LookupTable::build(2);
 
@@ -736,6 +749,19 @@ mod kani {
         let reg1 = reg1.get() as u8;
         let reg2 = reg2.get() as u8;
         assert_eq!((reg1, reg2), simple_read_args_regs2(&code));
+    }
+
+    #[kani::proof]
+    fn verify_interpreter_cache_size() {
+        let x: usize = kani::any_where(|x| *x <= super::cast(u32::MAX).to_usize());
+        let bytes: usize = super::interpreter_calculate_cache_size(x);
+        let calculate_count = super::interpreter_calculate_cache_num_entries(bytes);
+        assert_eq!(calculate_count, x);
+
+        let count = super::interpreter_calculate_cache_num_entries(x);
+        let calculated_bytes = super::interpreter_calculate_cache_size(count);
+        assert!(calculated_bytes <= x);
+        assert!(x - calculated_bytes <= super::interpreter_calculate_cache_size(1));
     }
 }
 
@@ -1864,8 +1890,6 @@ impl<'a, 'b, 'c> InstructionFormatter<'a, 'b, 'c> {
 
         impl core::fmt::Display for Formatter {
             fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
-                use crate::cast::cast;
-
                 if self.imm == 0 {
                     write!(fmt, "{}", self.imm)
                 } else if !self.is_64_bit {
@@ -3198,6 +3222,7 @@ pub struct ProgramBlob {
     unique_id: u64,
 
     is_64_bit: bool,
+    blob_length: u64,
 
     ro_data_size: u32,
     rw_data_size: u32,
@@ -4165,10 +4190,32 @@ fn test_instructions_iterator_does_not_emit_unnecessary_invalid_instructions_if_
     assert_eq!(i.next(), None);
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum EstimateInterpreterMemoryUsageArgs {
+    UnboundedCache {
+        instruction_count: u32,
+        basic_block_count: u32,
+        page_size: u32,
+    },
+    BoundedCache {
+        max_cache_size_bytes: u32,
+        instruction_count: u32,
+        max_block_size: u32,
+        page_size: u32,
+    },
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct ProgramMemoryInfo {
+    pub baseline_ram_consumption: u32,
+    pub purgeable_ram_consumption: u32,
+}
+
 #[derive(Clone, Default)]
 #[non_exhaustive]
 pub struct ProgramParts {
     pub is_64_bit: bool,
+    pub blob_length: u64,
     pub ro_data_size: u32,
     pub rw_data_size: u32,
     pub stack_size: u32,
@@ -4209,8 +4256,8 @@ impl ProgramParts {
             }));
         };
 
-        let blob_len = BlobLen::from_le_bytes(reader.read_slice(BLOB_LEN_SIZE)?.try_into().unwrap());
-        if blob_len != blob.len() as u64 {
+        let blob_length = BlobLen::from_le_bytes(reader.read_slice(BLOB_LEN_SIZE)?.try_into().unwrap());
+        if blob_length != blob.len() as u64 {
             return Err(ProgramParseError(ProgramParseErrorKind::Other(
                 "blob size doesn't match the blob length metadata",
             )));
@@ -4218,6 +4265,7 @@ impl ProgramParts {
 
         let mut parts = ProgramParts {
             is_64_bit,
+            blob_length,
             ..ProgramParts::default()
         };
 
@@ -4311,6 +4359,7 @@ impl ProgramBlob {
             unique_id: 0,
 
             is_64_bit: parts.is_64_bit,
+            blob_length: parts.blob_length,
 
             ro_data_size: parts.ro_data_size,
             rw_data_size: parts.rw_data_size,
@@ -4432,6 +4481,7 @@ impl ProgramBlob {
             #[cfg(feature = "unique-id")]
                 unique_id: _,
             is_64_bit,
+            blob_length: _,
             ro_data_size,
             rw_data_size,
             stack_size,
@@ -4725,6 +4775,97 @@ impl ProgramBlob {
             stack_depth: 0,
             mutation_depth: 0,
         }))
+    }
+
+    pub fn estimate_interpreter_memory_usage<I: InstructionSet>(
+        &self,
+        args: &EstimateInterpreterMemoryUsageArgs,
+    ) -> Result<ProgramMemoryInfo, ProgramParseError> {
+        let (instruction_count, page_size) = match args {
+            EstimateInterpreterMemoryUsageArgs::UnboundedCache {
+                instruction_count,
+                basic_block_count,
+                page_size,
+            } => {
+                if *basic_block_count == 0 {
+                    return Err(ProgramParseError(ProgramParseErrorKind::Other("program has no basic blocks")));
+                }
+
+                (*instruction_count, *page_size)
+            }
+            EstimateInterpreterMemoryUsageArgs::BoundedCache {
+                max_cache_size_bytes,
+                instruction_count,
+                max_block_size,
+                page_size,
+            } => {
+                if *max_cache_size_bytes == 0 {
+                    return Err(ProgramParseError(ProgramParseErrorKind::Other("maximum cache size cannot be zero")));
+                }
+
+                if *max_block_size == 0 {
+                    return Err(ProgramParseError(ProgramParseErrorKind::Other("maximum block size cannot be zero")));
+                }
+
+                (*instruction_count, *page_size)
+            }
+        };
+
+        if instruction_count == 0 {
+            return Err(ProgramParseError(ProgramParseErrorKind::Other("program has no instructions")));
+        }
+
+        let mut purgeable_ram_consumption = match args {
+            EstimateInterpreterMemoryUsageArgs::UnboundedCache { basic_block_count, .. } => {
+                let cache_entry_count_upper_bound =
+                    cast(instruction_count + *basic_block_count + INTERPRETER_CACHE_RESERVED_ENTRIES).to_usize();
+
+                interpreter_calculate_cache_size(cache_entry_count_upper_bound)
+            }
+            EstimateInterpreterMemoryUsageArgs::BoundedCache {
+                max_cache_size_bytes,
+                max_block_size,
+                ..
+            } => {
+                let max_cache_size_bytes = cast(*max_cache_size_bytes).to_usize();
+                let cache_entry_count_hard_limit = cast(*max_block_size + INTERPRETER_CACHE_RESERVED_ENTRIES).to_usize();
+                let cache_bytes_hard_limit = interpreter_calculate_cache_size(cache_entry_count_hard_limit);
+                if cache_bytes_hard_limit > max_cache_size_bytes {
+                    return Err(ProgramParseError(ProgramParseErrorKind::Other(
+                        "maximum cache size is too small for the given max block size",
+                    )));
+                }
+
+                max_cache_size_bytes
+            }
+        };
+
+        purgeable_ram_consumption =
+            purgeable_ram_consumption.saturating_add(((instruction_count + 1) * INTERPRETER_FLATMAP_ENTRY_SIZE) as usize);
+
+        let Ok(purgeable_ram_consumption) = u32::try_from(purgeable_ram_consumption) else {
+            return Err(ProgramParseError(ProgramParseErrorKind::Other(
+                "estimated interpreter cache size is too large",
+            )));
+        };
+
+        let Ok(baseline_ram_consumption) = u32::try_from(
+            self.blob_length
+                .saturating_add(u64::from(align_to_next_page_u32(page_size, self.ro_data_size).unwrap()))
+                .saturating_sub(self.ro_data.len() as u64)
+                .saturating_add(u64::from(align_to_next_page_u32(page_size, self.rw_data_size).unwrap()))
+                .saturating_sub(self.rw_data.len() as u64)
+                .saturating_add(u64::from(align_to_next_page_u32(page_size, self.stack_size).unwrap())),
+        ) else {
+            return Err(ProgramParseError(ProgramParseErrorKind::Other(
+                "calculated baseline RAM consumption is too large",
+            )));
+        };
+
+        Ok(ProgramMemoryInfo {
+            baseline_ram_consumption,
+            purgeable_ram_consumption,
+        })
     }
 }
 
