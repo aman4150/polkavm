@@ -348,14 +348,14 @@ unsafe extern "C" fn signal_handler(signal: c_int, info: &sys::siginfo_t, contex
             {
                 context.uc_mcontext.trapno == X86_TRAP_PF
             }
-            // #[cfg(target_os = "macos")]
-            // {
-            //     (*context.uc_mcontext).__ss.trapno == X86_TRAP_PF
-            // }
-            // #[cfg(target_os = "freebsd")]
-            // {
-            //     context.uc_mcontext.mc_trapno == X86_TRAP_PF
-            // }
+            #[cfg(target_os = "macos")]
+            {
+                (*context.uc_mcontext).__es.__trapno == X86_TRAP_PF
+            }
+            #[cfg(target_os = "freebsd")]
+            {
+                context.uc_mcontext.mc_trapno == X86_TRAP_PF
+            }
         };
 
         let rip = fetch_reg!(rip);
@@ -401,14 +401,14 @@ unsafe extern "C" fn signal_handler(signal: c_int, info: &sys::siginfo_t, contex
                     {
                         info.__bindgen_anon_1.__bindgen_anon_1._sifields._sigfault._addr as u64
                     }
-                    // #[cfg(target_os = "macos")]
-                    // {
-                    //     info.si_addr as u64
-                    // }
-                    // #[cfg(target_os = "freebsd")]
-                    // {
-                    //     info.si_addr as u64
-                    // }
+                    #[cfg(target_os = "macos")]
+                    {
+                        info.si_addr as u64
+                    }
+                    #[cfg(target_os = "freebsd")]
+                    {
+                        info.si_addr as u64
+                    }
                 };
 
                 log::trace!("Page fault at 0x{fault_address:x} (rip: 0x{rip:x})");
