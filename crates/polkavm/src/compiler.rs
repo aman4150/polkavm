@@ -94,6 +94,10 @@ where
     step_label: Label,
     trap_label: Label,
     memset_label: Label,
+    divrem32u_label: Label,
+    divrem32s_label: Label,
+    divrem64u_label: Label,
+    divrem64s_label: Label,
     invalid_jump_label: Label,
     instruction_set: RuntimeInstructionSet,
     memset_trampoline_start: usize,
@@ -210,6 +214,10 @@ where
         let jump_table_label = asm.forward_declare_label();
         let sbrk_label = asm.forward_declare_label();
         let memset_label = asm.forward_declare_label();
+        let divrem32u_label = asm.forward_declare_label();
+        let divrem32s_label = asm.forward_declare_label();
+        let divrem64u_label = asm.forward_declare_label();
+        let divrem64s_label = asm.forward_declare_label();
 
         polkavm_common::static_assert!(polkavm_common::zygote::VM_SANDBOX_MAXIMUM_NATIVE_CODE_SIZE < u32::MAX);
 
@@ -237,6 +245,10 @@ where
             jump_table_label,
             sbrk_label,
             memset_label,
+            divrem32u_label,
+            divrem32s_label,
+            divrem64u_label,
+            divrem64s_label,
             gas_metering: config.gas_metering,
             step_tracing,
             program_counter_to_machine_code_offset_list,
@@ -254,6 +266,7 @@ where
         ArchVisitor(&mut visitor).emit_trap_trampoline();
         ArchVisitor(&mut visitor).emit_ecall_trampoline();
         ArchVisitor(&mut visitor).emit_sbrk_trampoline();
+        ArchVisitor(&mut visitor).emit_divrem_trampoline();
 
         if config.gas_metering.is_some() {
             visitor.memset_trampoline_start = visitor.asm.len();
