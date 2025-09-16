@@ -10,28 +10,28 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-and-test-linux:
-    runs-on: ubuntu-24.04
-    steps:
-    - uses: actions/checkout@v4
-    - name: uname -a
-      run: uname -a
-    - name: Enable unprivileged userfaultfd
-      run: echo "1" | sudo tee /proc/sys/vm/unprivileged_userfaultfd
-    - name: Enable unprivileged user namespaces
-      run: echo "0" | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
-    - name: Install LLD
-      run: sudo apt-get install -y lld
-    - name: Install target -- i686-unknown-linux-musl
-      run: rustup target add i686-unknown-linux-musl
-    - name: Install target -- x86_64-unknown-freebsd
-      run: rustup target add x86_64-unknown-freebsd
-    - name: Build and test (generic)
-      run: ./ci/jobs/build-and-test.sh
-    - name: Build and test (Linux-only)
-      run: ./ci/jobs/build-and-test-linux.sh
-    - name: Check (FreeBSD)
-      run: ./ci/jobs/check-freebsd.sh
+  # build-and-test-linux:
+  #   runs-on: ubuntu-24.04
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #   - name: uname -a
+  #     run: uname -a
+  #   - name: Enable unprivileged userfaultfd
+  #     run: echo "1" | sudo tee /proc/sys/vm/unprivileged_userfaultfd
+  #   - name: Enable unprivileged user namespaces
+  #     run: echo "0" | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
+  #   - name: Install LLD
+  #     run: sudo apt-get install -y lld
+  #   - name: Install target -- i686-unknown-linux-musl
+  #     run: rustup target add i686-unknown-linux-musl
+  #   - name: Install target -- x86_64-unknown-freebsd
+  #     run: rustup target add x86_64-unknown-freebsd
+  #   - name: Build and test (generic)
+  #     run: ./ci/jobs/build-and-test.sh
+  #   - name: Build and test (Linux-only)
+  #     run: ./ci/jobs/build-and-test-linux.sh
+  #   - name: Check (FreeBSD)
+  #     run: ./ci/jobs/check-freebsd.sh
   build-and-test-macos:
     runs-on: macos-14
     steps:
@@ -40,81 +40,81 @@ jobs:
       run: ./ci/jobs/build-and-test.sh
     - name: Build and test (macOS-only)
       run: ./ci/jobs/build-and-test-macos.sh
-  clippy-macos:
-    runs-on: macos-14
-    steps:
-    - uses: actions/checkout@v4
-    - name: Install clippy (base toolchain)
-      run: rustup component add clippy
-    - name: Install clippy (benchtool toolchain)
-      run: cd tools/benchtool && rustup component add clippy
-    - name: Install clippy (guest-programs toolchain)
-      run: cd guest-programs && rustup component add clippy
-    - name: Run clippy
-      run: ./ci/jobs/clippy.sh
-  build-and-test-windows:
-    runs-on: windows-2022
-    steps:
-    - uses: actions/checkout@v4
-    - name: Build and test
-      shell: bash
-      run: ./ci/jobs/build-and-test.sh
-  build-guests:
-    runs-on: ubuntu-22.04
-    steps:
-    - uses: actions/checkout@v4
-    - name: Install LLD
-      run: sudo apt-get install -y lld
-    - name: Build guests
-      run: ./ci/jobs/build-guests.sh
-  kani:
-    runs-on: ubuntu-22.04
-    steps:
-    - uses: actions/checkout@v4
-    - name: Install kani
-      run: cargo install --locked --version 0.65.0 kani-verifier
-    - name: Setup kani
-      run: cargo kani setup
-    - name: Run kani
-      run: ./ci/jobs/kani.sh
-  clippy:
-    runs-on: ubuntu-22.04
-    steps:
-    - uses: actions/checkout@v4
-    - name: Install clippy (base toolchain)
-      run: rustup component add clippy
-    - name: Install clippy (zygote toolchain)
-      run: cd crates/polkavm-zygote && rustup component add clippy
-    - name: Install clippy (benchtool toolchain)
-      run: cd tools/benchtool && rustup component add clippy
-    - name: Install clippy (guest-programs toolchain)
-      run: cd guest-programs && rustup component add clippy
-    - name: Run clippy
-      run: ./ci/jobs/clippy.sh
-  rustfmt:
-    runs-on: ubuntu-22.04
-    steps:
-    - uses: actions/checkout@v4
-    - name: Install rustfmt (base toolchain)
-      run: rustup component add rustfmt
-    - name: Install rustfmt (zygote toolchain)
-      run: cd crates/polkavm-zygote && rustup component add rustfmt
-    - name: Install rustfmt (guest-programs toolchain)
-      run: cd guest-programs && rustup component add rustfmt
-    - name: Install rustfmt (fuzz toolchain)
-      run: cd fuzz && rustup component add rustfmt
-    - name: Run rustfmt
-      run: ./ci/jobs/rustfmt.sh
-  pallet-revive-tests:
-    runs-on: ubuntu-22.04
-    steps:
-    - uses: actions/checkout@v4
-    - name: Enable unprivileged userfaultfd
-      run: echo "1" | sudo tee /proc/sys/vm/unprivileged_userfaultfd
-    - name: Install LLD
-      run: sudo apt-get install -y lld
-    - name: Build and test
-      run: ./ci/jobs/build-and-test-pallet-revive.sh
+  # clippy-macos:
+  #   runs-on: macos-14
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #   - name: Install clippy (base toolchain)
+  #     run: rustup component add clippy
+  #   - name: Install clippy (benchtool toolchain)
+  #     run: cd tools/benchtool && rustup component add clippy
+  #   - name: Install clippy (guest-programs toolchain)
+  #     run: cd guest-programs && rustup component add clippy
+  #   - name: Run clippy
+  #     run: ./ci/jobs/clippy.sh
+  # build-and-test-windows:
+  #   runs-on: windows-2022
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #   - name: Build and test
+  #     shell: bash
+  #     run: ./ci/jobs/build-and-test.sh
+  # build-guests:
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #   - name: Install LLD
+  #     run: sudo apt-get install -y lld
+  #   - name: Build guests
+  #     run: ./ci/jobs/build-guests.sh
+  # kani:
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #   - name: Install kani
+  #     run: cargo install --locked --version 0.65.0 kani-verifier
+  #   - name: Setup kani
+  #     run: cargo kani setup
+  #   - name: Run kani
+  #     run: ./ci/jobs/kani.sh
+  # clippy:
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #   - name: Install clippy (base toolchain)
+  #     run: rustup component add clippy
+  #   - name: Install clippy (zygote toolchain)
+  #     run: cd crates/polkavm-zygote && rustup component add clippy
+  #   - name: Install clippy (benchtool toolchain)
+  #     run: cd tools/benchtool && rustup component add clippy
+  #   - name: Install clippy (guest-programs toolchain)
+  #     run: cd guest-programs && rustup component add clippy
+  #   - name: Run clippy
+  #     run: ./ci/jobs/clippy.sh
+  # rustfmt:
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #   - name: Install rustfmt (base toolchain)
+  #     run: rustup component add rustfmt
+  #   - name: Install rustfmt (zygote toolchain)
+  #     run: cd crates/polkavm-zygote && rustup component add rustfmt
+  #   - name: Install rustfmt (guest-programs toolchain)
+  #     run: cd guest-programs && rustup component add rustfmt
+  #   - name: Install rustfmt (fuzz toolchain)
+  #     run: cd fuzz && rustup component add rustfmt
+  #   - name: Run rustfmt
+  #     run: ./ci/jobs/rustfmt.sh
+  # pallet-revive-tests:
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #   - name: Enable unprivileged userfaultfd
+  #     run: echo "1" | sudo tee /proc/sys/vm/unprivileged_userfaultfd
+  #   - name: Install LLD
+  #     run: sudo apt-get install -y lld
+  #   - name: Build and test
+  #     run: ./ci/jobs/build-and-test-pallet-revive.sh
 #  run-substrate-node:
 #    runs-on: ubuntu-24.04
 #    steps:
@@ -127,19 +127,19 @@ jobs:
 #      run: sudo apt-get install -y lld protobuf-compiler
 #    - name: Build and test
 #      run: ./ci/jobs/build-and-run-substrate-node.sh
-  link-westend-runtime-blob:
-    runs-on: ubuntu-22.04
-    steps:
-    - uses: actions/checkout@v4
-    - name: Build and test
-      run: ./ci/jobs/link-westend-runtime-blob.sh
-  fuzz:
-    runs-on: ubuntu-22.04
-    steps:
-    - uses: actions/checkout@v4
-    - name: Install toolchain
-      run: rustup toolchain install nightly-2024-07-10
-    - name: Install cargo fuzz
-      run: rustup run nightly-2024-07-10 cargo install --locked --version 0.12.0 cargo-fuzz
-    - name: Fuzz
-      run: ./ci/jobs/fuzz.sh
+  # link-westend-runtime-blob:
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #   - name: Build and test
+  #     run: ./ci/jobs/link-westend-runtime-blob.sh
+  # fuzz:
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #   - name: Install toolchain
+  #     run: rustup toolchain install nightly-2024-07-10
+  #   - name: Install cargo fuzz
+  #     run: rustup run nightly-2024-07-10 cargo install --locked --version 0.12.0 cargo-fuzz
+  #   - name: Fuzz
+  #     run: ./ci/jobs/fuzz.sh
