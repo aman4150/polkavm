@@ -323,8 +323,11 @@ unsafe extern "C" fn signal_handler(signal: c_int, info: &sys::siginfo_t, contex
         _ => unreachable!("received unknown signal"),
     };
 
+    log::trace!("Signal handler: {}", signal);
+
     let vmctx = THREAD_VMCTX.with(|thread_ctx| *thread_ctx.get());
     if !vmctx.is_null() {
+        log::trace!("Handling signal within guest code");
         macro_rules! fetch_reg {
             ($reg:ident) => {{
                 #[cfg(target_os = "linux")]
@@ -333,7 +336,7 @@ unsafe extern "C" fn signal_handler(signal: c_int, info: &sys::siginfo_t, contex
                 }
                 #[cfg(target_os = "macos")]
                 {
-                    (*context.uc_mcontext).__ss.$reg as u64
+                    paste::paste! { (*context.uc_mcontext).__ss.[<__ $reg>] as u64 }
                 }
                 #[cfg(target_os = "freebsd")]
                 {
@@ -350,7 +353,7 @@ unsafe extern "C" fn signal_handler(signal: c_int, info: &sys::siginfo_t, contex
             }
             #[cfg(target_os = "macos")]
             {
-                (*context.uc_mcontext).__es.__trapno == X86_TRAP_PF
+                (*context.uc_mcontext).__es.__trapno as u64 == X86_TRAP_PF
             }
             #[cfg(target_os = "freebsd")]
             {
@@ -360,6 +363,8 @@ unsafe extern "C" fn signal_handler(signal: c_int, info: &sys::siginfo_t, contex
 
         let rip = fetch_reg!(rip);
         let vmctx = &mut *vmctx;
+        log::trace!("is_page_fault: {}, rip: {}, program-range: {:x?}", is_page_fault, rip, vmctx.program_range);
+
         if vmctx.program_range.contains(&rip) {
             use polkavm_common::regmap::NativeReg;
             for reg in polkavm_common::program::Reg::ALL {

@@ -516,9 +516,9 @@ mod tests {
         for format in [
             DisassemblyFormat::Guest,
             DisassemblyFormat::DiffFriendly,
-            #[cfg(target_arg = "x86_84")]
+            #[cfg(target_arch = "x86_64")]
             DisassemblyFormat::GuestAndNative,
-            #[cfg(target_arg = "x86_84")]
+            #[cfg(target_arch = "x86_64")]
             DisassemblyFormat::Native,
         ] {
             assert!(!disassemble_with_gas(blob, format).is_empty());

@@ -12,6 +12,7 @@ description = "A fast and secure RISC-V based virtual machine"
 
 [dependencies]
 log = { workspace = true }
+paste = { workspace = true }
 polkavm-assembler = { workspace = true, features = ["alloc"] }
 polkavm-common = { workspace = true, features = ["alloc", "logging", "regmap", "unique-id"] }
 schnellru = { workspace = true, optional = true }
